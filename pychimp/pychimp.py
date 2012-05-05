@@ -1,39 +1,59 @@
-import simplejson
+# -*- coding: utf-8 -*-
+
+import sys
 import urllib
 import urllib2
 
 from urlparse import urlparse
 
-__version__ = '0.1'
+try:
+    import simplejson as json
+except ImportError:
+    import json
 
 class PyChimp(object):
-    version = '1.2'
-    errorMessage = ''
-    errorCode = ''
-    
+    version = '1.3'
+
     # Cache the information on the API location on the server
     apiUrl = ''
-    
+
     # Default to a 300 second timeout on server calls
     timeout = 300
-    
-    # Cache the user api_key so we only have to log in once per client instantiation
-    api_key = ''
-    
-    # Cache the user api_key so we only have to log in once per client instantiation
-    secure = False
-    
-    def __init__(self, apikey, secure=False):
+    dc = 'us1'
+
+    def __init__(self, apikey='', secure=False, timeout=300):
         '''
         Connect to the MailChimp API for a given list.
-        
+
         @param string $apikey Your MailChimp apikey
         @param string $secure Whether or not this should use a secure connection
         '''
-        self.secure = secure
-        self.apiUrl = urlparse('http://api.mailchimp.com/%s/?output=json' % self.version)
+        try:
+            self.dc = apikey.split('-')[1]
+        except IndexError:
+            raise Exception('Error: API key invalid')
+
+        self.apiUrl = urlparse('http://%s.api.mailchimp.com/%s/?output=json'
+                               % (self.dc, self.version))
+
+        # Cache the user api_key so we only have to log in once per client instantiation
         self.api_key = apikey
-        
+
+        # Default to a 300 second timeout on server calls
+        self.timeout = timeout
+
+        # Define whether we use SSL
+        self.secure = secure or False
+
+        self.errorMessage = ''
+        self.errorCode = ''
+
+    def setTimeout(self, seconds):
+        self.timeout = seconds
+
+    def getTimeout(self):
+        return self.timeout
+
     def useSecure(self, val):
         if val == True:
             self.secure = True
@@ -43,28 +63,28 @@ class PyChimp(object):
     def campaignUnschedule(self, cid):
         '''
         Unschedule a campaign that is scheduled to be sent in the future
-    
+
         @section Campaign  Related
         @example mcapi_campaignUnschedule.php
         @example xml-rpc_campaignUnschedule.php
-    
+
         @param string cid the id of the campaign to unschedule
         @return boolean True on success
         '''
         params = {}
         params["cid"] = cid
-        
+
         return self.callServer("campaignUnschedule", params)
 
 
     def campaignSchedule(self, cid, schedule_time, schedule_time_b=None):
         '''
         Schedule a campaign to be sent in the future
-    
+
         @section Campaign  Related
         @example mcapi_campaignSchedule.php
         @example xml-rpc_campaignSchedule.php
-    
+
         @param string cid the id of the campaign to schedule
         @param string schedule_time the time to schedule the campaign. For A/B Split "schedule" campaigns, the time for Group A - in YYYY-MM-DD HH:II:SS format in <strong>GMT</strong>
         @param string schedule_time_b optional -the time to schedule Group B of an A/B Split "schedule" campaign - in YYYY-MM-DD HH:II:SS format in <strong>GMT</strong>
@@ -74,67 +94,67 @@ class PyChimp(object):
         params["cid"] = cid
         params["schedule_time"] = schedule_time
         params["schedule_time_b"] = schedule_time_b
-        
+
         return self.callServer("campaignSchedule", params)
 
 
     def campaignResume(self, cid):
         '''
         Resume sending an AutoResponder or RSS campaign
-    
+
         @section Campaign  Related
-    
+
         @param string cid the id of the campaign to pause
         @return boolean True on success
         '''
         params = {}
         params["cid"] = cid
-        
+
         return self.callServer("campaignResume", params)
 
 
     def campaignPause(self, cid):
         '''
         Pause an AutoResponder orRSS campaign from sending
-    
+
         @section Campaign  Related
-    
+
         @param string cid the id of the campaign to pause
         @return boolean True on success
         '''
         params = {}
         params["cid"] = cid
-        
+
         return self.callServer("campaignPause", params)
 
 
     def campaignSendNow(self, cid):
         '''
         Send a given campaign immediately
-    
+
         @section Campaign  Related
-    
+
         @example mcapi_campaignSendNow.php
         @example xml-rpc_campaignSendNow.php
-    
+
         @param string cid the id of the campaign to resume
         @return boolean True on success
         '''
         params = {}
         params["cid"] = cid
-        
+
         return self.callServer("campaignSendNow", params)
 
 
     def campaignSendTest(self, cid, test_emails=[], send_type=None):
         '''
         Send a test of this campaign to the provided email address
-    
+
         @section Campaign  Related
-    
+
         @example mcapi_campaignSendTest.php
         @example xml-rpc_campaignSendTest.php
-    
+
         @param string cid the id of the campaign to test
         @param array test_emails an array of email address to receive the test message
         @param string send_type optional by default (None) both formats are sent - "html" or "text" send just that format
@@ -144,18 +164,18 @@ class PyChimp(object):
         params["cid"] = cid
         params["test_emails"] = test_emails
         params["send_type"] = send_type
-        
+
         return self.callServer("campaignSendTest", params)
 
 
     def campaignTemplates(self):
         '''
         Retrieve all templates defined for your user account
-    
+
         @section Campaign  Related
         @example mcapi_campaignTemplates.php
         @example xml-rpc_campaignTemplates.php
-    
+
         @return array An array of structs, one for each template (see Returned Fields for details)
         @returnf integer id Id of the template
         @returnf string name Name of the template
@@ -169,56 +189,56 @@ class PyChimp(object):
     def campaignSegmentTest(self, list_id, options):
         '''
         Allows one to test their segmentation rules before creating a campaign using them
-    
+
         @section Campaign  Related
         @example mcapi_campaignSegmentTest.php
         @example xml-rpc_campaignSegmentTest.php
-    
+
         @param string list_id the list to test segmentation on - get lists using lists()
-        @param array options with 2 keys:  
+        @param array options with 2 keys:
                  string "match" controls whether to use AND or OR when applying your options - expects "<strong>any</strong>" (for OR) or "<strong>all</strong>" (for AND)
                  array "conditions" - up to 10 different criteria to apply while segmenting. Each criteria row must contain 3 keys - "<strong>field</strong>", "<strong>op</strong>", and "<strong>value</strong>" - and possibly a fourth, "<strong>extra</strong>", based on these definitions:
-    
+
                 Field = "<strong>date</strong>" : Select based on various dates we track
                     Valid Op(eration): <strong>eq</strong> (is) / <strong>gt</strong> (after) / <strong>lt</strong> (before)
-                    Valid Values: 
+                    Valid Values:
                     string last_campaign_sent  uses the date of the last campaign sent
                     string campaign_id - uses the send date of the campaign that carriers the Id submitted - see campaigns()
                     string YYYY-MM-DD - any date in the form of YYYY-MM-DD - <em>note:</em> anything that appears to start with YYYY will be treated as a date
-                          
+
                 Field = "<strong>interests</strong>":
-                    Valid Op(erations): <strong>one</strong> / <strong>none</strong> / <strong>all</strong> 
-                    Valid Values: a comma delimited of interest groups for the list - see listInterestGroups()    
-        
+                    Valid Op(erations): <strong>one</strong> / <strong>none</strong> / <strong>all</strong>
+                    Valid Values: a comma delimited of interest groups for the list - see listInterestGroups()
+
                 Field = "<strong>aim</strong>"
                     Valid Op(erations): <strong>open</strong> / <strong>noopen</strong> / <strong>click</strong> / <strong>noclick</strong>
                     Valid Values: "<strong>any</strong>" or a valid AIM-enabled Campaign that has been sent
-    
+
                 Field = "<strong>rating</strong>" : allows matching based on list member ratings
                     Valid Op(erations):  <strong>eq</strong> (=) / <strong>ne</strong> (!=) / <strong>gt</strong> (&gt) / <strong>lt</strong> (&lt)
                     Valid Values: a number between 0 and 5
-    
+
                 Field = "<strong>ecomm_prod</strong>" or "<strong>ecomm_prod</strong>": allows matching product and category names from purchases
-                    Valid Op(erations): 
+                    Valid Op(erations):
                      <strong>eq</strong> (=) / <strong>ne</strong> (!=) / <strong>gt</strong> (&gt) / <strong>lt</strong> (&lt) / <strong>like</strong> (like '%blah%') / <strong>nlike</strong> (not like '%blah%') / <strong>starts</strong> (like 'blah%') / <strong>ends</strong> (like '%blah')
                     Valid Values: any string
-    
+
                 Field = "<strong>ecomm_spent_one</strong>" or "<strong>ecomm_spent_all</strong>" : allows matching purchase amounts on a single order or all orders
                     Valid Op(erations): <strong>gt</strong> (&gt) / <strong>lt</strong> (&lt)
                     Valid Values: a number
-    
+
                 Field = "<strong>ecomm_date</strong>" : allow matching based on order dates
                     Valid Op(eration): <strong>eq</strong> (is) / <strong>gt</strong> (after) / <strong>lt</strong> (before)
-                    Valid Values: 
+                    Valid Values:
                     string YYYY-MM-DD - any date in the form of YYYY-MM-DD
-    
+
                 Field = An <strong>Address</strong> Merge Var. Use <strong>Merge0-Merge30</strong> or the <strong>Custom Tag</strong> you've setup for your merge field - see listMergeVars(). Note, Address fields can still be used with the default operations below - this section is broken out solely to highlight the differences in using the geolocation routines.
                     Valid Op(erations): <strong>geoin</strong>
                     Valid Values: The number of miles an address should be within
                     Extra Value: The Zip Code to be used as the center point
-        
+
                 Default Field = A Merge Var. Use <strong>Merge0-Merge30</strong> or the <strong>Custom Tag</strong> you've setup for your merge field - see listMergeVars()
-                    Valid Op(erations): 
+                    Valid Op(erations):
                      <strong>eq</strong> (=) / <strong>ne</strong> (!=) / <strong>gt</strong> (&gt) / <strong>lt</strong> (&lt) / <strong>like</strong> (like '%blah%') / <strong>nlike</strong> (not like '%blah%') / <strong>starts</strong> (like 'blah%') / <strong>ends</strong> (like '%blah')
                     Valid Values: any string
         @return integer total The total number of subscribers matching your segmentation options
@@ -226,20 +246,20 @@ class PyChimp(object):
         params = {}
         params["list_id"] = list_id
         params["options"] = options
-        
+
         return self.callServer("campaignSegmentTest", params)
 
 
     def campaignCreate(self, type, options, content, segment_opts=None, type_opts=None):
         '''
         Create a new draft campaign to send
-    
+
         @section Campaign  Related
         @example mcapi_campaignCreate.php
         @example xml-rpc_campaignCreate.php
         @example xml-rpc_campaignCreateABSplit.php
         @example xml-rpc_campaignCreateRss.php
-    
+
         @param string type the Campaign Type to create - one of "regular", "plaintext", "absplit", "rss", "trans", "auto"
         @param array options a hash of the standard options for this campaign :
                 string list_id the list to send this campaign to- get lists using lists()
@@ -257,25 +277,25 @@ class PyChimp(object):
                 boolean inline_css optional Whether or not css should be automatically inlined when this campaign is sent, defaults to False.
                 boolean generate_text optional Whether of not to auto-generate your Text content from the HTML content. Note that this will be ignored if the Text part of the content passed is not empty, defaults to False.
                 boolean auto_tweet optional If set, this campaign will be auto-tweeted when it is sent - defaults to False. Note that if a Twitter account isn't linked, this will be silently ignored.
-    
-       @param array content the content for this campaign - use a struct with the following keys: 
+
+       @param array content the content for this campaign - use a struct with the following keys:
                     "html" for pasted HTML content
                     "text" for the plain-text version
                     "url" to have us pull in content from a URL. Note, this will override any other content options - for lists with Email Format options, you'll need to turn on generate_text as well
                     "archive" to send a Base64 encoded archive file for us to import all media from. Note, this will override any other content options - for lists with Email Format options, you'll need to turn on generate_text as well
                     "archive_type" optional - only necessary for the "archive" option. Supported formats are: zip, tar.gz, tar.bz2, tar, tgz, tbz . If not included, we will default to zip
-                
-                
+
+
                     If you chose a template instead of pasting in your HTML content, then use "html_" followed by the template sections as keys - for example, use a key of "html_MAIN" to fill in the "MAIN" section of a template. Supported template sections include: "html_HEADER", "html_MAIN", "html_SIDECOLUMN", and "html_FOOTER"
        @param array segment_opts optional - if you wish to do Segmentation with this campaign this array should contain: see campaignSegmentTest(). It's suggested that you test your options against campaignSegmentTest(). Also, "trans" campaigns <strong>do not</strong> support segmentation.
-       @param array type_opts optional - 
+       @param array type_opts optional -
                 For RSS Campaigns this, array should contain:
                     string url the URL to pull RSS content from - it will be verified and must exist
                     string schedule optional one of "daily", "weekly", "monthly" - defaults to "daily"
                     string schedule_hour optional an hour between 0 and 24 - default to 4 (4am <em>local time</em>) - applies to all schedule types
                     string schedule_weekday optional for "weekly" only, a number specifying the day of the week to send: 0 (Sunday) - 6 (Saturday) - defaults to 1 (Monday)
                     string schedule_monthday optional for "monthly" only, a number specifying the day of the month to send (1 - 28) or "last" for the last day of a given month. Defaults to the 1st day of the month
-             
+
                 For A/B Split campaigns, this array should contain:
                     string split_test The values to segment based on. Currently, one of: "subject", "from_name", "schedule". NOTE, for "schedule", you will need to call campaignSchedule() separately!
                     string pick_winner How the winner will be picked, one of: "opens" (by the open_rate), "clicks" (by the click rate), "manual" (you pick manually)
@@ -288,15 +308,15 @@ class PyChimp(object):
                     string from_email_b optional sort of, required when split_test is "from_name"
                     string subject_a optional sort of, required when split_test is "subject"
                     string subject_b optional sort of, required when split_test is "subject"
-                
+
                 For AutoResponder campaigns, this array should contain:
                     string offset-units one of "day", "week", "month", "year" - required
                     string offset-time the number of units, must be a number greater than 0 - required
                     string offset-dir either "before" or "after"
                     string event optional "signup" (default) to base this on double-optin signup, "date" or "annual" to base this on merge field in the list
                     string event-datemerge optional sort of, this is required if the event is "date" or "annual"
-    
-    
+
+
         @return string the ID for the created campaign
         '''
         params = {}
@@ -305,26 +325,26 @@ class PyChimp(object):
         params["content"] = content
         params["segment_opts"] = segment_opts
         params["type_opts"] = type_opts
-        
+
         return self.callServer("campaignCreate", params)
 
 
     def campaignUpdate(self, cid, name, value):
         '''
         Update just about any setting for a campaign that has <em>not</em> been sent. See campaignCreate() for details.
-      
-     
+
+
          Caveats:<br/><ul>
                <li>If you set list_id, all segmentation options will be deleted and must be re-added.</li>
                <li>If you set template_id, you need to follow that up by setting it's 'content'</li>
                <li>If you set segment_opts, you should have tested your options against campaignSegmentTest() as campaignUpdate() will not allow you to set a segment that includes no members.</li></ul>
         @section Campaign  Related
-    
+
         @example mcapi_campaignUpdate.php
         @example mcapi_campaignUpdateAB.php
         @example xml-rpc_campaignUpdate.php
         @example xml-rpc_campaignUpdateAB.php
-    
+
         @param string cid the Campaign Id to update
         @param string name the parameter name ( see campaignCreate() ). For items in the <strong>options</strong> array, this will be that parameter's name (subject, from_email, etc.). Additional parameters will be that option name  (content, segment_opts). "type_opts" will be the name of the type - rss, auto, trans, etc.
         @param mixed  value an appropriate value for the parameter ( see campaignCreate() ). For items in the <strong>options</strong> array, this will be that parameter's value. For additional parameters, this is the same value passed to them.
@@ -334,52 +354,52 @@ class PyChimp(object):
         params["cid"] = cid
         params["name"] = name
         params["value"] = value
-        
+
         return self.callServer("campaignUpdate", params)
 
 
     def campaignReplicate(self, cid):
         '''
         Replicate a campaign.
-   
+
         @section Campaign  Related
-   
+
         @example mcapi_campaignReplicate.php
-   
+
         @param string cid the Campaign Id to replicate
         @return string the id of the replicated Campaign created, otherwise an error will be thrown
         '''
         params = {}
         params["cid"] = cid
-        
+
         return self.callServer("campaignReplicate", params)
 
 
     def campaignDelete(self, cid):
         '''
         Delete a campaign. Seriously, "poof, gone!" - be careful!
-   
+
         @section Campaign  Related
-   
+
         @example mcapi_campaignDelete.php
-   
+
         @param string cid the Campaign Id to delete
         @return boolean True if the delete succeeds, otherwise an error will be thrown
         '''
         params = {}
         params["cid"] = cid
-        
+
         return self.callServer("campaignDelete", params)
 
 
-    def campaigns(filters={}, start=0, limit=25):
+    def campaigns(self, filters={}, start=0, limit=25):
         '''
         Get the list of campaigns and their details matching the specified filters
-    
+
         @section Campaign  Related
         @example mcapi_campaigns.php
         @example xml-rpc_campaigns.php
-    
+
         @param array filters a hash of filters to apply to this query - all are optional:
                 string  campaign_id optional - return a single campaign using a know campaign_id
                 string  list_id optional - the list to send this campaign to- get lists using lists()
@@ -415,25 +435,25 @@ class PyChimp(object):
         @returnf boolean track_clicks_text Whether or not links in the text version of the campaign were tracked
         @returnf boolean track_clicks_html Whether or not links in the html version of the campaign were tracked
         @returnf boolean track_opens Whether or not opens for the campaign were tracked
-        @returnf string segment_text a string marked-up with HTML explaining the segment used for the campaign in plain English 
+        @returnf string segment_text a string marked-up with HTML explaining the segment used for the campaign in plain English
         @returnf array segment_opts the segment used for the campaign - can be passed to campaignSegmentTest() or campaignCreate()
         '''
         params = {}
         params["filters"] = filters
         params["start"] = start
         params["limit"] = limit
-        
+
         return self.callServer("campaigns", params)
 
 
     def campaignFolders(self):
         '''
         List all the folders for a user account
-    
+
         @section Campaign  Related
         @example mcapi_campaignFolders.php
         @example xml-rpc_campaignFolders.php
-    
+
         @return array Array of folder structs (see Returned Fields for details)
         @returnf integer folder_id Folder Id for the given folder, this can be used in the campaigns() function to filter on.
         @returnf string name Name of the given folder
@@ -444,12 +464,12 @@ class PyChimp(object):
     def campaignStats(self, cid):
         '''
         Given a list and a campaign, get all the relevant campaign statistics (opens, bounces, clicks, etc.)
-    
+
         @section Campaign  Stats
-    
+
         @example mcapi_campaignStats.php
         @example xml-rpc_campaignStats.php
-    
+
         @param string cid the campaign id to pull stats for (can be gathered using campaigns())
         @return array struct of the statistics for this campaign
         @returnf integer syntax_errors Number of email addresses in campaign that had syntactical errors.
@@ -470,19 +490,19 @@ class PyChimp(object):
         '''
         params = {}
         params["cid"] = cid
-        
+
         return self.callServer("campaignStats", params)
 
 
     def campaignClickStats(self, cid):
         '''
         Get an array of the urls being tracked, and their click counts for a given campaign
-    
+
         @section Campaign  Stats
-    
+
         @example mcapi_campaignClickStats.php
         @example xml-rpc_campaignClickStats.php
-    
+
         @param string cid the campaign id to pull stats for (can be gathered using campaigns())
         @return struct urls will be keys and contain their associated statistics:
         @returnf integer clicks Number of times the specific link was clicked
@@ -490,7 +510,7 @@ class PyChimp(object):
         '''
         params = {}
         params["cid"] = cid
-        
+
         return self.callServer("campaignClickStats", params)
 
 
@@ -498,11 +518,11 @@ class PyChimp(object):
         '''
         Get the top 5 performing email domains for this campaign. Users want more than 5 should use campaign campaignEmailStatsAIM()
         or campaignEmailStatsAIMAll() and generate any additional stats they require.
-    
+
         @section Campaign  Stats
-    
+
         @example mcapi_campaignEmailDomainPerformance.php
-    
+
         @param string cid the campaign id to pull email domain performance for (can be gathered using campaigns())
         @return array domains email domains and their associated stats
         @returnf string domain Domain name or special "Other" to roll-up stats past 5 domains
@@ -517,20 +537,20 @@ class PyChimp(object):
         @returnf integer bounces_pct Percentage of bounces from this domain (whole number)
         @returnf integer opens_pct Percentage of opens from this domain (whole number)
         @returnf integer clicks_pct Percentage of clicks from this domain (whole number)
-        @returnf integer unsubs_pct Percentage of unsubs from this domain (whole number) 
+        @returnf integer unsubs_pct Percentage of unsubs from this domain (whole number)
         '''
         params = {}
         params["cid"] = cid
-        
+
         return self.callServer("campaignEmailDomainPerformance", params)
 
 
     def campaignHardBounces(self, cid, start=0, limit=1000):
         '''
         Get all email addresses with Hard Bounces for a given campaign
-    
+
         @section Campaign  Stats
-    
+
         @param string cid the campaign id to pull bounces for (can be gathered using campaigns())
         @param integer    start optional for large data sets, the page number to start at - defaults to 1st page of data (page 0)
         @param integer    limit optional for large data sets, the number of results to return - defaults to 1000, upper limit set at 15000
@@ -540,16 +560,16 @@ class PyChimp(object):
         params["cid"] = cid
         params["start"] = start
         params["limit"] = limit
-        
+
         return self.callServer("campaignHardBounces", params)
 
 
     def campaignSoftBounces(self, cid, start=0, limit=1000):
         '''
         Get all email addresses with Soft Bounces for a given campaign
-    
+
         @section Campaign  Stats
-    
+
         @param string cid the campaign id to pull bounces for (can be gathered using campaigns())
         @param integer    start optional for large data sets, the page number to start at - defaults to 1st page of data (page 0)
         @param integer    limit optional for large data sets, the number of results to return - defaults to 1000, upper limit set at 15000
@@ -559,16 +579,16 @@ class PyChimp(object):
         params["cid"] = cid
         params["start"] = start
         params["limit"] = limit
-        
+
         return self.callServer("campaignSoftBounces", params)
 
 
     def campaignUnsubscribes(self, cid, start=0, limit=1000):
         '''
         Get all unsubscribed email addresses for a given campaign
-    
+
         @section Campaign  Stats
-    
+
         @param string cid the campaign id to pull bounces for (can be gathered using campaigns())
         @param integer    start optional for large data sets, the page number to start at - defaults to 1st page of data  (page 0)
         @param integer    limit optional for large data sets, the number of results to return - defaults to 1000, upper limit set at 15000
@@ -578,18 +598,18 @@ class PyChimp(object):
         params["cid"] = cid
         params["start"] = start
         params["limit"] = limit
-        
+
         return self.callServer("campaignUnsubscribes", params)
 
 
     def campaignAbuseReports(self, cid, since=None, start=0, limit=500):
         '''
         Get all email addresses that complained about a given campaign
-    
+
         @section Campaign  Stats
-    
+
         @example mcapi_campaignAbuseReports.php
-    
+
         @param string cid the campaign id to pull abuse reports for (can be gathered using campaigns())
         @param integer start optional for large data sets, the page number to start at - defaults to 1st page of data  (page 0)
         @param integer limit optional for large data sets, the number of results to return - defaults to 500, upper limit set at 1000
@@ -604,7 +624,7 @@ class PyChimp(object):
         params["since"] = since
         params["start"] = start
         params["limit"] = limit
-        
+
         return self.callServer("campaignAbuseReports", params)
 
 
@@ -612,11 +632,11 @@ class PyChimp(object):
         '''
         Retrieve the text presented in our app for how a campaign performed and any advice we may have for you - best
         suited for display in customized reports pages. Note: some messages will contain HTML - clean tags as necessary
-    
+
         @section Campaign  Stats
-    
+
         @example mcapi_campaignAdvice.php
-    
+
         @param string cid the campaign id to pull advice text for (can be gathered using campaigns())
         @return array advice on the campaign's performance
         @returnf msg the advice message
@@ -624,18 +644,18 @@ class PyChimp(object):
         '''
         params = {}
         params["cid"] = cid
-        
+
         return self.callServer("campaignAdvice", params)
 
 
     def campaignAnalytics(self, cid):
         '''
         Retrieve the Google Analytics data we've collected for this campaign. Note, requires Google Analytics Add-on to be installed and configured.
-    
+
         @section Campaign  Stats
-    
+
         @example mcapi_campaignAnalytics.php
-    
+
         @param string cid the campaign id to pull bounces for (can be gathered using campaigns())
         @return array analytics we've collected for the passed campaign.
         @returnf integer visits number of visits
@@ -652,17 +672,17 @@ class PyChimp(object):
         '''
         params = {}
         params["cid"] = cid
-        
+
         return self.callServer("campaignAnalytics", params)
 
 
     def campaignGeoOpens(self, cid):
         '''
         Retrieve the countries and number of opens tracked for each. Email address are not returned.
-    
+
         @section Campaign  Stats
-    
-    
+
+
         @param string cid the campaign id to pull bounces for (can be gathered using campaigns())
         @return array countries an array of countries where opens occurred
         @returnf string code The ISO3166 2 digit country code
@@ -672,20 +692,20 @@ class PyChimp(object):
         '''
         params = {}
         params["cid"] = cid
-        
+
         return self.callServer("campaignGeoOpens", params)
 
 
     def campaignGeoOpensForCountry(self, cid, code):
         '''
         Retrieve the regions and number of opens tracked for a certain country. Email address are not returned.
-    
+
         @section Campaign  Stats
-    
-    
+
+
         @param string cid the campaign id to pull bounces for (can be gathered using campaigns())
         @param string code An ISO3166 2 digit country code
-        @return array regions an array of regions within the provided country where opens occurred. 
+        @return array regions an array of regions within the provided country where opens occurred.
         @returnf string code An internal code for the region. When this is blank, it indicates we know the country, but not the region
         @returnf string name The name of the region, if we have one. For blank "code" values, this will be "Rest of Country"
         @returnf int opens The total number of opens that occurred in the country
@@ -693,17 +713,17 @@ class PyChimp(object):
         params = {}
         params["cid"] = cid
         params["code"] = code
-        
+
         return self.callServer("campaignGeoOpensForCountry", params)
 
 
     def campaignEepUrlStats(self, cid):
         '''
         Retrieve the tracked eepurl mentions on Twitter
-    
+
         @section Campaign  Stats
-    
-    
+
+
         @param string cid the campaign id to pull bounces for (can be gathered using campaigns())
         @return array stats an array containing tweets and retweets including the campaign's eepurl
         @returnf int tweets Total number of tweets seen
@@ -716,7 +736,7 @@ class PyChimp(object):
         '''
         params = {}
         params["cid"] = cid
-        
+
         return self.callServer("campaignEepUrlStats", params)
 
 
@@ -725,11 +745,11 @@ class PyChimp(object):
         Retrieve the full bounce messages for the given campaign. Note that this can return very large amounts
         of data depending on how large the campaign was and how much cruft the bounce provider returned. Also,
         message over 30 days old are subject to being removed
-    
+
         @section Campaign  Stats
-    
+
         @example mcapi_campaignBounceMessages.php
-    
+
         @param string cid the campaign id to pull bounces for (can be gathered using campaigns())
         @param integer start optional for large data sets, the page number to start at - defaults to 1st page of data  (page 0)
         @param integer limit optional for large data sets, the number of results to return - defaults to 25, upper limit set at 50
@@ -744,16 +764,16 @@ class PyChimp(object):
         params["start"] = start
         params["limit"] = limit
         params["since"] = since
-        
+
         return self.callServer("campaignBounceMessages", params)
 
 
     def campaignEcommOrders(self, cid, start=0, limit=100, since=None):
         '''
         Retrieve the Ecommerce Orders tracked by campaignEcommAddOrder()
-    
+
         @section Campaign  Stats
-    
+
         @param string cid the campaign id to pull bounces for (can be gathered using campaigns())
         @param integer start optional for large data sets, the page number to start at - defaults to 1st page of data  (page 0)
         @param integer limit optional for large data sets, the number of results to return - defaults to 100, upper limit set at 500
@@ -774,16 +794,16 @@ class PyChimp(object):
         params["start"] = start
         params["limit"] = limit
         params["since"] = since
-        
+
         return self.callServer("campaignEcommOrders", params)
 
 
     def campaignShareReport(self, cid, opts={}):
         '''
         Get the URL to a customized <a href="http://eepurl.com/gKmL" target="_blank">VIP Report</a> for the specified campaign and optionally send an email to someone with links to it. Note subsequent calls will overwrite anything already set for the same campign (eg, the password)
-    
+
         @section Campaign  Related
-    
+
         @param string cid the campaign id to share a report for (can be gathered using campaigns())
         @param array  opts optional various parameters which can be used to configure the shared report
                 string  header_type optional - "text" or "image', defaults to "text'
@@ -802,16 +822,16 @@ class PyChimp(object):
         params = {}
         params["cid"] = cid
         params["opts"] = opts
-        
+
         return self.callServer("campaignShareReport", params)
 
 
     def campaignContent(self, cid, for_archive=True):
         '''
         Get the content (both html and text) for a campaign either as it would appear in the campaign archive or as the raw, original content
-    
+
         @section Campaign  Related
-    
+
         @param string cid the campaign id to get content for (can be gathered using campaigns())
         @param bool   for_archive optional controls whether we return the Archive version (True) or the Raw version (False), defaults to True
         @return struct Struct containing all content for the campaign (see Returned Fields for details
@@ -821,7 +841,7 @@ class PyChimp(object):
         params = {}
         params["cid"] = cid
         params["for_archive"] = for_archive
-        
+
         return self.callServer("campaignContent", params)
 
 
@@ -829,9 +849,9 @@ class PyChimp(object):
         '''
         Retrieve the list of email addresses that opened a given campaign with how many times they opened - note: this AIM function is free and does
         not actually require the AIM module to be installed
-    
+
         @section Campaign AIM
-    
+
         @param string cid the campaign id to get opens for (can be gathered using campaigns())
         @param integer    start optional for large data sets, the page number to start at - defaults to 1st page of data  (page 0)
         @param integer    limit optional for large data sets, the number of results to return - defaults to 1000, upper limit set at 15000
@@ -843,16 +863,16 @@ class PyChimp(object):
         params["cid"] = cid
         params["start"] = start
         params["limit"] = limit
-        
+
         return self.callServer("campaignOpenedAIM", params)
 
 
     def campaignNotOpenedAIM(self, cid, start=0, limit=1000):
         '''
         Retrieve the list of email addresses that did not open a given campaign
-    
+
         @section Campaign AIM
-    
+
         @param string cid the campaign id to get no opens for (can be gathered using campaigns())
         @param integer    start optional for large data sets, the page number to start at - defaults to 1st page of data  (page 0)
         @param integer    limit optional for large data sets, the number of results to return - defaults to 1000, upper limit set at 15000
@@ -862,16 +882,16 @@ class PyChimp(object):
         params["cid"] = cid
         params["start"] = start
         params["limit"] = limit
-        
+
         return self.callServer("campaignNotOpenedAIM", params)
 
 
     def campaignClickDetailAIM(self, cid, url, start=0, limit=1000):
         '''
         Return the list of email addresses that clicked on a given url, and how many times they clicked
-    
+
         @section Campaign AIM
-    
+
         @param string cid the campaign id to get click stats for (can be gathered using campaigns())
         @param string url the URL of the link that was clicked on
         @param integer    start optional for large data sets, the page number to start at - defaults to 1st page of data (page 0)
@@ -885,16 +905,16 @@ class PyChimp(object):
         params["url"] = url
         params["start"] = start
         params["limit"] = limit
-        
+
         return self.callServer("campaignClickDetailAIM", params)
 
 
     def campaignEmailStatsAIM(self, cid, email_address):
         '''
         Given a campaign and email address, return the entire click and open history with timestamps, ordered by time
-    
+
         @section Campaign AIM
-    
+
         @param string cid the campaign id to get stats for (can be gathered using campaigns())
         @param string email_address the email address to check OR the email "id" returned from listMemberInfo, Webhooks, and Campaigns
         @return array Array of structs containing the actions (opens and clicks) that the email took, with timestamps
@@ -905,18 +925,18 @@ class PyChimp(object):
         params = {}
         params["cid"] = cid
         params["email_address"] = email_address
-        
+
         return self.callServer("campaignEmailStatsAIM", params)
 
 
     def campaignEmailStatsAIMAll(self, cid, start=0, limit=100):
         '''
-        Given a campaign and correct paging limits, return the entire click and open history with timestamps, ordered by time, 
+        Given a campaign and correct paging limits, return the entire click and open history with timestamps, ordered by time,
         for every user a campaign was delivered to.
-    
+
         @section Campaign AIM
         @example mcapi_campaignEmailStatsAIMAll.php
-    
+
         @param string cid the campaign id to get stats for (can be gathered using campaigns())
         @param integer start optional for large data sets, the page number to start at - defaults to 1st page of data (page 0)
         @param integer limit optional for large data sets, the number of results to return - defaults to 100, upper limit set at 1000
@@ -929,16 +949,16 @@ class PyChimp(object):
         params["cid"] = cid
         params["start"] = start
         params["limit"] = limit
-        
+
         return self.callServer("campaignEmailStatsAIMAll", params)
 
 
     def campaignEcommAddOrder(self, order):
         '''
-        Attach Ecommerce Order Information to a Campaign. This will generall be used by ecommerce package plugins 
+        Attach Ecommerce Order Information to a Campaign. This will generall be used by ecommerce package plugins
         <a href="/plugins/ecomm360.phtml">that we provide</a> or by 3rd part system developers.
         @section Campaign  Related
-    
+
         @param array order an array of information pertaining to the order that has completed. Use the following keys:
                     string id the Order Id
                     string campaign_id the Campaign Id to track this order with (see the "mc_cid" query string variable a campaign passes)
@@ -953,7 +973,7 @@ class PyChimp(object):
                     array items the individual line items for an order using these keys:
                     <div style="padding-left:30px"><table><tr><td colspan=*>
                         integer line_num optional the line number of the item on the order. We will generate these if they are not passed
-                        integer product_id the store's internal Id for the product. Lines that do no contain this will be skipped 
+                        integer product_id the store's internal Id for the product. Lines that do no contain this will be skipped
                         string product_name the product name for the product_id associated with this item. We will auto update these as they change (based on product_id)
                         integer category_id the store's internal Id for the (main) category associated with this product. Our testing has found this to be a "best guess" scenario
                         string category_name the category name for the category_id this product is in. Our testing has found this to be a "best guess" scenario. Our plugins walk the category heirarchy up and send "Root - SubCat1 - SubCat4", etc.
@@ -964,18 +984,18 @@ class PyChimp(object):
         '''
         params = {}
         params["order"] = order
-        
+
         return self.callServer("campaignEcommAddOrder", params)
 
 
-    def lists(self):
+    def lists(self, params):
         '''
         Retrieve all of the lists defined for your user account
-    
+
         @section List Related
         @example mcapi_lists.php
         @example xml-rpc_lists.php
-    
+
         @return array list of your Lists and their associated information (see Returned Fields for description)
         @returnf string id The list id for this list. This will be used for all other list management functions.
         @returnf integer web_id The list id used in our web app, allows you to create a link directly to it
@@ -994,18 +1014,17 @@ class PyChimp(object):
         @returnf integer unsubscribe_count The number of members who have unsubscribed from the given list since the last campaign was sent
         @returnf integer cleaned_count The number of members cleaned from the given list since the last campaign was sent
         '''
-        params = {}
-        
-        return self.callServer("lists", params)
+        params = params or {}
 
+        return self.callServer("lists", params)
 
     def listMergeVars(self, id):
         '''
         Get the list of merge tags for a given list, including their name, tag, and required setting
-    
+
         @section List Related
         @example xml-rpc_listMergeVars.php
-    
+
         @param string id the list id to connect to. Get by calling lists()
         @return array list of merge tags for the list
         @returnf string name Name of the merge field
@@ -1014,17 +1033,17 @@ class PyChimp(object):
         '''
         params = {}
         params["id"] = id
-        
+
         return self.callServer("listMergeVars", params)
 
 
     def listMergeVarAdd(self, id, tag, name, req={}):
         '''
         Add a new merge tag to a given list
-    
+
         @section List Related
         @example xml-rpc_listMergeVarAdd.php
-    
+
         @param string id the list id to connect to. Get by calling lists()
         @param string tag The merge tag to add, e.g. FNAME
         @param string name The long description of the tag being added, used for user displays
@@ -1035,7 +1054,7 @@ class PyChimp(object):
                         boolean show optional indicates whether the field is displayed in the app's list member view - defaults to True
                         string default_value optional the default value for the field. See listSubscribe() for formatting info. Defaults to blank
                         array choices optional kind of - an array of strings to use as the choices for radio and dropdown type fields
-    
+
         @return bool True if the request succeeds, otherwise an error will be thrown
         '''
         params = {}
@@ -1043,16 +1062,16 @@ class PyChimp(object):
         params["tag"] = tag
         params["name"] = name
         params["req"] = req
-        
+
         return self.callServer("listMergeVarAdd", params)
 
 
     def listMergeVarUpdate(self, id, tag, options):
         '''
         Update most parameters for a merge tag on a given list. You cannot currently change the merge type
-    
+
         @section List Related
-    
+
         @param string id the list id to connect to. Get by calling lists()
         @param string tag The merge tag to update
         @param array options The options to change for a merge var. See listMergeVarAdd() for valid options
@@ -1062,18 +1081,18 @@ class PyChimp(object):
         params["id"] = id
         params["tag"] = tag
         params["options"] = options
-        
+
         return self.callServer("listMergeVarUpdate", params)
 
 
     def listMergeVarDel(self, id, tag):
         '''
-        Delete a merge tag from a given list and all its members. Seriously - the data is removed from all members as well! 
+        Delete a merge tag from a given list and all its members. Seriously - the data is removed from all members as well!
         Note that on large lists this method may seem a bit slower than calls you typically make.
-    
+
         @section List Related
         @example xml-rpc_listMergeVarDel.php
-    
+
         @param string id the list id to connect to. Get by calling lists()
         @param string tag The merge tag to delete
         @return bool True if the request succeeds, otherwise an error will be thrown
@@ -1081,17 +1100,17 @@ class PyChimp(object):
         params = {}
         params["id"] = id
         params["tag"] = tag
-        
+
         return self.callServer("listMergeVarDel", params)
 
 
     def listInterestGroups(self, id):
         '''
         Get the list of interest groups for a given list, including the label and form information
-    
+
         @section List Related
         @example xml-rpc_listInterestGroups.php
-    
+
         @param string id the list id to connect to. Get by calling lists()
         @return struct list of interest groups for the list
         @returnf string name Name for the Interest groups
@@ -1100,72 +1119,156 @@ class PyChimp(object):
         '''
         params = {}
         params["id"] = id
-        
+
         return self.callServer("listInterestGroups", params)
 
 
-    def listInterestGroupAdd(self, id, group_name):
+    def listInterestGroupings(self, id):
+        '''
+        Get the list of interest groupings for a given list, including the label, form information, and included groups for each
+
+        @section List Related
+        @example xml-rpc_listInterestGroupings.php
+
+        @param string $id the list id to connect to. Get by calling lists()
+        @return struct list of interest groups for the list
+        @returnf string name Name for the Interest groups
+        @returnf string form_field Gives the type of interest group: checkbox,radio,select
+        @returnf array groups Array of the grouping options including the "bit" value, "name", "display_order", and number of "subscribers" with the option selected.
+        '''
+        params = {}
+        params["id"] = id
+
+        return self.callServer("listInterestGroupings", params);
+
+
+    def listInterestGroupAdd(self, id, group_name, grouping_id=None):
         '''
         Add a single Interest Group - if interest groups for the List are not yet enabled, adding the first
         group will automatically turn them on.
-    
+
         @section List Related
         @example xml-rpc_listInterestGroupAdd.php
-    
+
         @param string id the list id to connect to. Get by calling lists()
         @param string group_name the interest group to add
+        @param int optional grouping_id The grouping to add the new group to - get using listInterestGrouping() . If not supplied, the first grouping on the list is used.
         @return bool True if the request succeeds, otherwise an error will be thrown
         '''
         params = {}
         params["id"] = id
         params["group_name"] = group_name
-        
+        params["grouping_id"] = grouping_id
+
         return self.callServer("listInterestGroupAdd", params)
 
 
-    def listInterestGroupDel(self, id, group_name):
+    def listInterestGroupDel(self, id, group_name, grouping_id=None):
         '''
         Delete a single Interest Group - if the last group for a list is deleted, this will also turn groups for the list off.
-    
+
         @section List Related
         @example xml-rpc_listInterestGroupDel.php
-    
+
         @param string id the list id to connect to. Get by calling lists()
         @param string group_name the interest group to delete
+        @param int optional grouping_id The grouping to delete the group from - get using listInterestGrouping() . If not supplied, the first grouping on the list is used.
         @return bool True if the request succeeds, otherwise an error will be thrown
         '''
         params = {}
         params["id"] = id
         params["group_name"] = group_name
-        
+        params["grouping_id"] = grouping_id
+
         return self.callServer("listInterestGroupDel", params)
 
 
-    def listInterestGroupUpdate(self, id, old_name, new_name):
+    def listInterestGroupUpdate(self, id, old_name, new_name, grouping_id=None):
         '''
         Change the name of an Interest Group
-    
+
         @section List Related
-    
+
         @param string id the list id to connect to. Get by calling lists()
         @param string old_name the interest group name to be changed
         @param string new_name the new interest group name to be set
+        @param int optional grouping_id The grouping to delete the group from - get using listInterestGrouping() . If not supplied, the first grouping on the list is used.
         @return bool True if the request succeeds, otherwise an error will be thrown
         '''
         params = {}
         params["id"] = id
         params["old_name"] = old_name
         params["new_name"] = new_name
-        
+        params["grouping_id"] = grouping_id
+
         return self.callServer("listInterestGroupUpdate", params)
+
+
+    def listInterestGroupingAdd(self, id, name, type, groups):
+        '''
+        Add a new Interest Grouping - if interest groups for the List are not yet enabled, adding the first
+        grouping will automatically turn them on.
+
+        @section List Related
+        @example xml-rpc_listInterestGroupingAdd.php
+
+        @param string $id the list id to connect to. Get by calling lists()
+        @param string $name the interest grouping to add - grouping names must be unique
+        @param string $type_name The type of the grouping to add - one of "checkboxes", "hidden", "dropdown", "radio"
+        @param array $groups The lists of initial group names to be added - at least 1 is required and the names must be unique within a grouping. If the number takes you over the 60 group limit, an error will be thrown.
+        @return int the new grouping id if the request succeeds, otherwise an error will be thrown
+        '''
+        params = {}
+        params["id"] = id
+        params["name"] = name
+        params["type"] = type
+        params["groups"] = groups
+
+        return self.callServer("listInterestGroupingAdd", params)
+
+
+    def listInterestGroupingUpdate(self, grouping_id, name, value):
+        '''
+        Update an existing Interest Grouping
+
+        @section List Related
+        @example xml-rpc_listInterestGroupingUpdate.php
+
+        @param int $grouping_id the interest grouping id - get from listInterestGroupings()
+        @param string $name The name of the field to update - either "name" or "type". Groups with in the grouping should be manipulated using the standard listInterestGroup* methods
+        param string $value The new value of the field. Grouping names must be unique - only "hidden" and "checkboxes" grouping types can be converted between each other.
+        @return bool true if the request succeeds, otherwise an error will be thrown
+        '''
+        params = {}
+        params["grouping_id"] = grouping_id
+        params["name"] = name
+        params["value"] = value
+
+        return self.callServer("listInterestGroupingUpdate", params)
+
+
+    def listInterestGroupingDel(self, grouping_id):
+        '''
+        Delete an existing Interest Grouping - this will permanently delete all contained interest groups and will remove those selections from all list members
+
+        @section List Related
+        @example xml-rpc_listInterestGroupingDel.php
+
+        @param int $grouping_id the interest grouping id - get from listInterestGroupings()
+        @return bool true if the request succeeds, otherwise an error will be thrown
+        '''
+        params = {}
+        params["grouping_id"] = grouping_id
+
+        return self.callServer("listInterestGroupingDel", params)
 
 
     def listWebhooks(self, id):
         '''
         Return the Webhooks configured for the given list
-    
+
         @section List Related
-    
+
         @param string id the list id to connect to. Get by calling lists()
         @return array list of webhooks
         @returnf string url the URL for this Webhook
@@ -1174,16 +1277,16 @@ class PyChimp(object):
         '''
         params = {}
         params["id"] = id
-        
+
         return self.callServer("listWebhooks", params)
 
 
     def listWebhookAdd(self, id, url, actions={}, sources={}):
         '''
         Add a new Webhook URL for the given list
-    
+
         @section List Related
-    
+
         @param string id the list id to connect to. Get by calling lists()
         @param string url a valid URL for the Webhook - it will be validated. note that a url may only exist on a list once.
         @param array actions optional a hash of actions to fire this Webhook for
@@ -1198,22 +1301,22 @@ class PyChimp(object):
                 boolean api optional actions that happen via API calls, defaults to False
         @return bool True if the call succeeds, otherwise an exception will be thrown
         '''
-        
+
         params = {}
         params["id"] = id
         params["url"] = url
         params["actions"] = actions
         params["sources"] = sources
-        
+
         return self.callServer("listWebhookAdd", params)
 
 
     def listWebhookDel(self, id, url):
         '''
         Delete an existing Webhook URL from a given list
-    
+
         @section List Related
-    
+
         @param string id the list id to connect to. Get by calling lists()
         @param string url the URL of a Webhook on this list
         @return boolean True if the call succeeds, otherwise an exception will be thrown
@@ -1221,31 +1324,97 @@ class PyChimp(object):
         params = {}
         params["id"] = id
         params["url"] = url
-        
+
         return self.callServer("listWebhookDel", params)
 
+    def listStaticSegments(self, id):
+        '''
+        Retrieve all of the Static Segments for a list.
+
+        @section List Related
+
+        @param string id the list id to connect to. Get by calling lists()
+        @param string $id the list id to connect to. Get by calling lists()
+        @return array an array of parameters for each static segment
+        @returnf int id the id of the segment
+        @returnf string name the name for the segment
+        @returnf int member_count the total number of members currently in a segment
+        @returnf date date_created the date/time the segment was created
+        @returnf date last_update the date/time the segment was last updated (add or del)
+        @returnf date last_reset the date/time the segment was last reset (ie had all members cleared from it)
+        '''
+        params = {}
+        params["id"] = id
+        return self.callServer("listStaticSegments", params)
+
+    def listAddStaticSegment(self, id, name):
+        '''
+        Save a segment against a list for later use. There is no limit to the number of segments which can be saved.
+        Static Segments <strong>are not</strong> tied to any merge data, interest groups, etc. They essentially allow
+        you to configure an unlimited number of custom segments which will have standard performance.
+
+        When using proper segments, Static Segments are one of the available options for segmentation just as if you
+        used a merge var (and they can be used with other segmentation options), though performance may degrade at
+        that point.
+
+        @section List Related
+
+        @param string $id the list id to connect to. Get by calling lists()
+        @param string $name a unique name per list for the segment - 25 character maximum length, anything longer will be truncated
+        @return int the id of the new segment, otherwise an error will be thrown.
+        '''
+        params = {}
+        params["id"] = id
+        params["name"] = name
+        return self.callServer("listAddStaticSegment", params)
+
+    def listResetStaticSegment(self, id, seg_id):
+        params = {}
+        params["id"] = id
+        params["seg_id"] = seg_id
+        return self.callServer("listResetStaticSegment", params)
+
+    def listDelStaticSegment(self, id, seg_id):
+        params = {}
+        params["id"] = id
+        params["seg_id"] = seg_id
+        return self.callServer("listDelStaticSegment", params)
+
+    def listStaticSegmentAddMembers(self, id, seg_id, batch):
+        params = {}
+        params["id"] = id
+        params["seg_id"] = seg_id
+        params["batch"] = batch
+        return self.callServer("listStaticSegmentAddMembers", params)
+
+    def listStaticSegmentDelMembers(self, id, seg_id, batch):
+        params = {}
+        params["id"] = id
+        params["seg_id"] = seg_id
+        params["batch"] = batch
+        return self.callServer("listStaticSegmentDelMembers", params)
 
     def listSubscribe(self, id, email_address, merge_vars, email_type='html', double_optin=True, update_existing=False, replace_interests=True, send_welcome=False):
         '''
         Subscribe the provided email to a list. By default this sends a confirmation email - you will not see new members until the link contained in it is clicked!
-    
+
         @section List Related
-    
+
         @example mcapi_listSubscribe.php
         @example xml-rpc_listSubscribe.php
-    
+
         @param string id the list id to connect to. Get by calling lists()
         @param string email_address the email address to subscribe
         @param array merge_vars array of merges for the email (FNAME, LNAME, etc.) (see examples below for handling "blank" arrays). Note that a merge field can only hold up to 255 characters. Also, there are a few "special" keys:
                             string EMAIL set this to change the email address. This is only respected on calls using update_existing or when passed to listUpdateMember()
                             string INTERESTS Set Interest Groups by passing a field named "INTERESTS" that contains a comma delimited list of Interest Groups to add. Commas in Interest Group names should be escaped with a backslash. ie, "," =&gt "\,"
                             string OPTINIP Set the Opt-in IP fields. <em>Abusing this may cause your account to be suspended.</em> We do validate this and it must not be a private IP address.
-                        
+
                             <strong>Handling Field Data Types</strong> - most fields you can just pass a string and all is well. For some, though, that is not the case...
                             Field values should be formatted as follows:
                             string address For the string version of an Address, the fields should be delimited by <strong>2</strong> spaces. Address 2 can be skipped. The Country should be a 2 character ISO-3166-1 code and will default to your default country if not set
                             array address For the array version of an Address, the requirements for Address 2 and Country are the same as with the string version. Then simply pass us an array with the keys <strong>addr1</strong>, <strong>addr2</strong>, <strong>city</strong>, <strong>state</strong>, <strong>zip</strong>, <strong>country</strong> and appropriate values for each
-    
+
                             string date use YYYY-MM-DD to be safe. Generally, though, anything strtotime() understands we'll understand - <a href="http://us2.php.net/strtotime" target="_blank">http://us2.php.net/strtotime</a>
                             string dropdown can be a normal string - we <em>will</em> validate that the value is a valid option
                             string image must be a valid, existing url. we <em>will</em> check its existence
@@ -1253,15 +1422,13 @@ class PyChimp(object):
                             double number pass in a valid number - anything else will turn in to zero (0). Note, this will be rounded to 2 decimal places
                             string phone If your account has the US Phone numbers option set, this <em>must</em> be in the form of NPA-NXX-LINE (404-555-1212). If not, we assume an International number and will simply set the field with what ever number is passed in.
                             string website This is a standard string, but we <em>will</em> verify that it looks like a valid URL
-                        
-                        
-                        
+
         @param string email_type optional - email type preference for the email (html, text, or mobile defaults to html)
         @param boolean double_optin optional - flag to control whether a double opt-in confirmation message is sent, defaults to True. <em>Abusing this may cause your account to be suspended.</em>
         @param boolean update_existing optional - flag to control whether a existing subscribers should be updated instead of throwing and error
         @param boolean replace_interests - flag to determine whether we replace the interest groups with the groups provided, or we add the provided groups to the member's interest groups (optional, defaults to True)
         @param boolean send_welcome - if your double_optin is False and this is True, we will send your lists Welcome Email if this subscribe succeeds - this willnot* fire if we end up updating an existing subscriber. If double_optin is True, this has no effect. defaults to False.
-    
+
         @return boolean True on success, False on failure. When using MCAPI.class.php, the value can be tested and error messages pulled from the MCAPI object (see below)
         '''
         params = {}
@@ -1273,18 +1440,18 @@ class PyChimp(object):
         params["update_existing"] = update_existing
         params["replace_interests"] = replace_interests
         params["send_welcome"] = send_welcome
-        
+
         return self.callServer("listSubscribe", params)
 
 
     def listUnsubscribe(self, id, email_address, delete_member=False, send_goodbye=True, send_notify=True):
         '''
         Unsubscribe the given email address from the list
-    
+
         @section List Related
         @example mcapi_listUnsubscribe.php
         @example xml-rpc_listUnsubscribe.php
-    
+
         @param string id the list id to connect to. Get by calling lists()
         @param string email_address the email address to unsubscribe  OR the email "id" returned from listMemberInfo, Webhooks, and Campaigns
         @param boolean delete_member flag to completely delete the member from your list instead of just unsubscribing, default to False
@@ -1298,17 +1465,17 @@ class PyChimp(object):
         params["delete_member"] = delete_member
         params["send_goodbye"] = send_goodbye
         params["send_notify"] = send_notify
-        
+
         return self.callServer("listUnsubscribe", params)
 
 
     def listUpdateMember(self, id, email_address, merge_vars, email_type='', replace_interests=True):
         '''
         Edit the email address, merge fields, and interest groups for a list member
-    
+
         @section List Related
         @example mcapi_listUpdateMember.php
-    
+
         @param string id the list id to connect to. Get by calling lists()
         @param string email_address the current email address of the member to update OR the "id" for the member returned from listMemberInfo, Webhooks, and Campaigns
         @param array merge_vars array of new field values to update the member with.  See merge_vars in listSubscribe() for details.
@@ -1322,22 +1489,22 @@ class PyChimp(object):
         params["merge_vars"] = merge_vars
         params["email_type"] = email_type
         params["replace_interests"] = replace_interests
-        
+
         return self.callServer("listUpdateMember", params)
 
- 
+
     def listBatchSubscribe(self, id, batch, double_optin=True, update_existing=False, replace_interests=True):
         '''
         Subscribe a batch of email addresses to a list at once. If you are using a serialized version of the API, we strongly suggest that you
         only run this method as a POST request, and <em>not</em> a GET request.
-    
+
         @section List Related
-    
+
         @example mcapi_listBatchSubscribe.php
         @example xml-rpc_listBatchSubscribe.php
-    
+
         @param string id the list id to connect to. Get by calling lists()
-        @param array batch an array of structs for each address to import with two special keys: "EMAIL" for the email address, and "EMAIL_TYPE" for the email type option (html, text, or mobile) 
+        @param array batch an array of structs for each address to import with two special keys: "EMAIL" for the email address, and "EMAIL_TYPE" for the email type option (html, text, or mobile)
         @param boolean double_optin flag to control whether to send an opt-in confirmation email - defaults to True
         @param boolean update_existing flag to control whether to update members that are already subscribed to the list or to return an error, defaults to False (return error)
         @param boolean replace_interests flag to determine whether we replace the interest groups with the updated groups provided, or we add the provided groups to the member's interest groups (optional, defaults to True)
@@ -1352,17 +1519,17 @@ class PyChimp(object):
         params["double_optin"] = double_optin
         params["update_existing"] = update_existing
         params["replace_interests"] = replace_interests
-        
+
         return self.callServer("listBatchSubscribe", params)
 
 
     def listBatchUnsubscribe(self, id, emails, delete_member=False, send_goodbye=True, send_notify=False):
         '''
         Unsubscribe a batch of email addresses to a list
-    
+
         @section List Related
         @example mcapi_listBatchUnsubscribe.php
-    
+
         @param string id the list id to connect to. Get by calling lists()
         @param array emails array of email addresses to unsubscribe
         @param boolean delete_member flag to completely delete the member from your list instead of just unsubscribing, default to False
@@ -1379,17 +1546,17 @@ class PyChimp(object):
         params["delete_member"] = delete_member
         params["send_goodbye"] = send_goodbye
         params["send_notify"] = send_notify
-        
+
         return self.callServer("listBatchUnsubscribe", params)
 
 
     def listMembers(self, id, status='subscribed', since=None, start=0, limit=100):
         '''
         Get all of the list members for a list that are of a particular status
-    
+
         @section List Related
         @example mcapi_listMembers.php
-    
+
         @param string id the list id to connect to. Get by calling lists()
         @param string status the status to get members for - one of(subscribed, unsubscribed, cleaned, updated), defaults to subscribed
         @param string since optional pull all members whose status (subscribed/unsubscribed/cleaned) has changed or whose profile (updated) has changed since this date/time (in GMT) - format is YYYY-MM-DD HH:mm:ss (24hr)
@@ -1405,18 +1572,18 @@ class PyChimp(object):
         params["since"] = since
         params["start"] = start
         params["limit"] = limit
-        
+
         return self.callServer("listMembers", params)
 
 
     def listMemberInfo(self, id, email_address):
         '''
         Get all the information for a particular member of a list
-    
+
         @section List Related
         @example mcapi_listMemberInfo.php
         @example xml-rpc_listMemberInfo.php
-    
+
         @param string id the list id to connect to. Get by calling lists()
         @param string email_address the member email address to get information for OR the "id" for the member returned from listMemberInfo, Webhooks, and Campaigns
         @return array array of list member info (see Returned Fields for details)
@@ -1425,7 +1592,7 @@ class PyChimp(object):
         @returnf string email_type The type of emails this customer asked to get: html, text, or mobile
         @returnf array merges An associative array of all the merge tags and the data for those tags for this email address. <em>Note</em>: Interest Groups are returned as comma delimited strings - if a group name contains a comma, it will be escaped with a backslash. ie, "," =&gt "\,"
         @returnf string status The subscription status for this email address, either subscribed, unsubscribed or cleaned
-        @returnf string ip_opt IP Address this address opted in from. 
+        @returnf string ip_opt IP Address this address opted in from.
         @returnf string ip_signup IP Address this address signed up from.
         @returnf int member_rating the rating of the subscriber. This will be 1 - 5 as described <a href="http://eepurl.com/f-2P" target="_blank">here</a>
         @returnf string campaign_id If the user is unsubscribed and they unsubscribed from a specific campaign, that campaign_id will be listed, otherwise this is not returned.
@@ -1435,18 +1602,18 @@ class PyChimp(object):
         params = {}
         params["id"] = id
         params["email_address"] = email_address
-        
+
         return self.callServer("listMemberInfo", params)
 
 
     def listAbuseReports(self, id, start=0, limit=500, since=None):
         '''
         Get all email addresses that complained about a given campaign
-    
+
         @section List Related
-    
+
         @example mcapi_listAbuseReports.php
-    
+
         @param string id the list id to pull abuse reports for (can be gathered using lists())
         @param integer start optional for large data sets, the page number to start at - defaults to 1st page of data  (page 0)
         @param integer limit optional for large data sets, the number of results to return - defaults to 500, upper limit set at 1000
@@ -1462,20 +1629,20 @@ class PyChimp(object):
         params["start"] = start
         params["limit"] = limit
         params["since"] = since
-        
+
         return self.callServer("listAbuseReports", params)
 
 
     def listGrowthHistory(self, id):
         '''
         Access the Growth History by Month for a given list.
-    
+
         @section List Related
-    
+
         @example mcapi_listGrowthHistory.php
-    
+
         @param string id the list id to connect to. Get by calling lists()
-        @return array array of months and growth 
+        @return array array of months and growth
         @returnf string month The Year and Month in question using YYYY-MM format
         @returnf integer existing number of existing subscribers to start the month
         @returnf integer imports number of subscribers imported during the month
@@ -1483,29 +1650,29 @@ class PyChimp(object):
         '''
         params = {}
         params["id"] = id
-        
+
         return self.callServer("listGrowthHistory", params)
 
 
     def getAffiliateInfo(self):
         '''
-        <strong>DEPRECATED:</strong> Retrieve your User Unique Id and your Affiliate link to display/use for 
+        <strong>DEPRECATED:</strong> Retrieve your User Unique Id and your Affiliate link to display/use for
         <a href="/monkeyrewards/" target="_blank">Monkey Rewards</a>. While
         we don't use the User Id for any API functions, it can be useful if building up URL strings for things such as the profile editor and sub/unsub links.
-    
+
         @section Helper
-    
+
         @deprecated See getAccountDetails() for replacement
-    
+
         @example mcapi_getAffiliateInfo.php
         @example xml-rpc_getAffiliateInfo.php
-    
+
         @return array containing your Affilliate Id and full link.
-        @returnf string user_id Your User Unique Id. 
+        @returnf string user_id Your User Unique Id.
         @returnf string url Your Monkey Rewards link for our Affiliate program
         '''
         params = {}
-        
+
         return self.callServer("getAffiliateInfo", params)
 
 
@@ -1513,9 +1680,9 @@ class PyChimp(object):
         '''
         Retrieve lots of account information including payments made, plan info, some account stats, installed modules,
         contact info, and more. No private information like Credit Card numbers is available.
-    
+
         @section Helper
-    
+
         @return array containing the details for the account tied to this API Key
         @returnf string username The Account username
         @returnf string user_id The Account user unique id (for building some links)
@@ -1538,17 +1705,17 @@ class PyChimp(object):
         @returnf array rewards Rewards details for the account including credits & inspections earned, number of referals, referal details, and rewards used
         '''
         params = {}
-        
+
         return self.callServer("getAccountDetails", params)
 
 
     def generateText(self, type, content):
         '''
         Have HTML content auto-converted to a text-only format. You can send: plain HTML, an array of Template content, an existing Campaign Id, or an existing Template Id. Note that this will <b>not</b> save anything to or update any of your lists, campaigns, or templates.
-    
+
         @section Helper
         @example xml-rpc_generateText.php
-    
+
         @param string type The type of content to parse. Must be one of: "html", "template", "url", "cid" (Campaign Id), or "tid" (Template Id)
         @param mixed content The content to use. For "html" expects  a single string value, "template" expects an array like you send to campaignCreate, "url" expects a valid & public URL to pull from, "cid" expects a valid Campaign Id, and "tid" expects a valid Template Id on your account.
         @return string the content pass in converted to text.
@@ -1556,17 +1723,17 @@ class PyChimp(object):
         params = {}
         params["type"] = type
         params["content"] = content
-        
+
         return self.callServer("generateText", params)
 
 
     def inlineCss(self, html, strip_css=False):
         '''
         Send your HTML content to have the CSS inlined and optionally remove the original styles.
-    
+
         @section Helper
         @example xml-rpc_inlineCss.php
-    
+
         @param string html Your HTML content
         @param bool strip_css optional Whether you want the CSS &ltstyle&gt tags stripped from the returned document. Defaults to False.
         @return string Your HTML content with all CSS inlined, just like if we sent it.
@@ -1574,37 +1741,37 @@ class PyChimp(object):
         params = {}
         params["html"] = html
         params["strip_css"] = strip_css
-        
+
         return self.callServer("inlineCss", params)
 
 
     def createFolder(self, name):
         '''
         Create a new folder to file campaigns in
-    
+
         @section Helper
         @example mcapi_createFolder.php
         @example xml-rpc_createFolder.php
-    
+
         @param string name a unique name for a folder
         @return integer the folder_id of the newly created folder.
         '''
         params = {}
         params["name"] = name
-        
+
         return self.callServer("createFolder", params)
 
 
     def ecommAddOrder(self, order):
         '''
-        Import Ecommerce Order Information to be used for Segmentatio. This will generall be used by ecommerce package plugins 
+        Import Ecommerce Order Information to be used for Segmentatio. This will generall be used by ecommerce package plugins
         <a href="/plugins/ecomm360.phtml">that we provide</a> or by 3rd part system developers.
         @section Helper
-    
+
         @param array order an array of information pertaining to the order that has completed. Use the following keys:
                     string id the Order Id
                     string email_id optional (kind of) the Email Id of the subscriber we should attach this order to (see the "mc_eid" query string variable a campaign passes) - either this or <strong>email</strong> is required. If both are provided, email_id takes precedence
-                    string email optional (kind of) the Email Address we should attach this order to - either this or <strong>email_id</strong> is required. If both are provided, email_id takes precedence 
+                    string email optional (kind of) the Email Address we should attach this order to - either this or <strong>email_id</strong> is required. If both are provided, email_id takes precedence
                     double total The Order Total (ie, the full amount the customer ends up paying)
                     string order_date optional the date of the order - if this is not provided, we will default the date to now
                     double shipping optional the total paid for Shipping Fees
@@ -1616,7 +1783,7 @@ class PyChimp(object):
                     array items the individual line items for an order using these keys:
                     <div style="padding-left:30px"><table><tr><td colspan=*>
                         integer line_num optional the line number of the item on the order. We will generate these if they are not passed
-                        integer product_id the store's internal Id for the product. Lines that do no contain this will be skipped 
+                        integer product_id the store's internal Id for the product. Lines that do no contain this will be skipped
                         string product_name the product name for the product_id associated with this item. We will auto update these as they change (based on product_id)
                         integer category_id the store's internal Id for the (main) category associated with this product. Our testing has found this to be a "best guess" scenario
                         string category_name the category name for the category_id this product is in. Our testing has found this to be a "best guess" scenario. Our plugins walk the category heirarchy up and send "Root - SubCat1 - SubCat4", etc.
@@ -1627,31 +1794,31 @@ class PyChimp(object):
         '''
         params = {}
         params["order"] = order
-        
+
         return self.callServer("ecommAddOrder", params)
 
 
     def listsForEmail(self, email_address):
         '''
         Retrieve all List Ids a member is subscribed to.
-    
+
         @section Helper
-    
+
         @param string email_address the email address to unsubscribe  OR the email "id" returned from listMemberInfo, Webhooks, and Campaigns
         @return array An array of list_ids the member is subscribed to.
         '''
         params = {}
         params["email_address"] = email_address
-        
+
         return self.callServer("listsForEmail", params)
 
 
     def chimpChatter(self):
         '''
         Return the current Chimp Chatter messages for an account.
-    
+
         @section Helper
-    
+
         @return array An array of chatter messages and properties
         @returnf string message The chatter message
         @returnf string type The type of the message - one of scheduled, sent, inspection, subscribes, unsubscribes, low_credits, absplit, best_opens, best_clicks, or abuse
@@ -1660,17 +1827,17 @@ class PyChimp(object):
         @returnf string update_time The date/time the message was last updated
         '''
         params = {}
-        
+
         return self.callServer("chimpChatter", params)
 
     def apikeys(self, username, password, expired=False):
         '''
         Retrieve a list of all MailChimp API Keys for this User
-    
+
         @section Security Related
         @example xml-rpc_apikeyAdd.php
         @example mcapi_apikeyAdd.php
-    
+
         @param string username Your MailChimp user name
         @param string password Your MailChimp password
         @param boolean expired optional - whether or not to include expired keys, defaults to False
@@ -1683,16 +1850,16 @@ class PyChimp(object):
         params["username"] = username
         params["password"] = password
         params["expired"] = expired
-        
+
         return self.callServer("apikeys", params)
 
     def apikeyAdd(self, username, password):
         '''
         Add an API Key to your account. We will generate a new key for you and return it.
-    
+
         @section Security Related
         @example xml-rpc_apikeyAdd.php
-    
+
         @param string username Your MailChimp user name
         @param string password Your MailChimp password
         @return string a new API Key that can be immediately used.
@@ -1700,44 +1867,44 @@ class PyChimp(object):
         params = {}
         params["username"] = username
         params["password"] = password
-        
+
         return self.callServer("apikeyAdd", params)
-    
+
     def apikeyExpire(self, username, password):
         '''
         Expire a Specific API Key. Note that if you expire all of your keys, just visit <a href="http://admin.mailchimp.com/account/api" target="_blank">your API dashboard</a>
-        to create a new one. If you are trying to shut off access to your account for an old developer, change your 
-        MailChimp password, then expire all of the keys they had access to. Note that this takes effect immediately, so make 
-        sure you replace the keys in any working application before expiring them! Consider yourself warned... 
-    
+        to create a new one. If you are trying to shut off access to your account for an old developer, change your
+        MailChimp password, then expire all of the keys they had access to. Note that this takes effect immediately, so make
+        sure you replace the keys in any working application before expiring them! Consider yourself warned...
+
         @section Security Related
         @example mcapi_apikeyExpire.php
         @example xml-rpc_apikeyExpire.php
-    
+
         @param string username Your MailChimp user name
         @param string password Your MailChimp password
         @return boolean True if it worked, otherwise an error is thrown.
         '''
-        
+
         params = {}
         params["username"] = username
         params["password"] = password
-        
+
         return self.callServer("apikeyExpire", params)
-    
+
     def ping(self):
         '''
         "Ping" the MailChimp API - a simple method you can call that will return a constant value as long as everything is good. Note
         than unlike most all of our methods, we don't throw an Exception if we are having issues. You will simply receive a different
         string back that will explain our view on what is going on.
-        
+
         @section Helper
         @example xml-rpc_ping.php
-        
+
         @return string returns "Everything's Chimpy!" if everything is chimpy, otherwise returns an error message
         '''
         return self.callServer("ping")
-    
+
     def callMethod(self):
         '''
         Internal function - proxy method for certain XML-RPC calls | DO NOT CALL
@@ -1745,52 +1912,56 @@ class PyChimp(object):
         @return mixed the result of the call
         '''
         params = {}
-        
+
         return self.callServer("callMethod", params)
-    
+
     def callServer(self, method, params={}):
         '''
         Actually connect to the server and call the requested methods, parsing the result
         You should never have to call this function manually
         '''
-        dc = "us1"
-        
-        if '-' in self.api_key:
-            dc = self.api_key.split('-')[1]
-        
-        host = "%s.%s" % (dc, self.apiUrl.netloc)
-        
+
         params.update({'apikey': self.api_key})
-        
+
         self.errorMessage = ''
         self.errorCode = ''
-        
-        params = urllib.urlencode(self.httpBuildQuery(params), doseq=True)
-        
-        request = urllib2.Request("%(scheme)s://%(url)s?%(query)s&method=%(method)s" % {
+
+        url = "%(scheme)s://%(url)s?%(query)s&method=%(method)s" % {
             'scheme': "https" if self.secure else "http",
-            'url': '%s%s' % (self.apiUrl.netloc, self.apiUrl.path),
+            'url': '%s.%s%s' % (self.dc, self.apiUrl.netloc, self.apiUrl.path),
             'query': self.apiUrl.query,
-            'method': method}, params, {"User-Agent": "PyChimp/%s" % __version__})
-            
+            'method': method
+        }
+        params = urllib.urlencode(self.httpBuildQuery(params), doseq=True)
+
+        request = urllib2.Request(url, params,
+                                  {"User-Agent": "PyChimp/%s" % self.version})
+
         try:
-            payload = urllib2.urlopen(request, timeout=self.timeout)
+            # add timeout support for Python 2.6 and lower
+            if sys.version_info < (2, 7):
+                import socket
+                socket.setdefaulttimeout(self.timeout)
+                payload = urllib2.urlopen(request)
+            else:
+                payload = urllib2.urlopen(request, timeout=self.timeout)
         except urllib2.URLError:
             self.errorMessage = "Could not read response (timed out)";
             self.errorCode = -98;
-        
+            return
+
         result = payload.read()
         payload.close()
-        
-        response = simplejson.loads(result)
-        
+
+        response = json.loads(result)
+
         try:
             if 'error' in response:
                 self.errorMessage = response['error']
                 self.errorCode = response['code']
         except TypeError:
             pass # exception for non-iterable (boolean) types
-        
+
         return response
 
     def httpBuildQuery(self, params, key=None):
@@ -1798,10 +1969,10 @@ class PyChimp(object):
         Re-implement http_build_query for systems that do not already have it
         """
         ret = {}
-    
+
         for name, val in params.items():
             name = name
-        
+
             if key is not None and not isinstance(key, int):
                 name = "%s[%s]" % (key, name)
             if isinstance(val, dict):
@@ -1810,5 +1981,5 @@ class PyChimp(object):
                 ret.update(self.httpBuildQuery(dict(enumerate(val)), name))
             elif val is not None:
                 ret[name] = val
-    
+
         return ret
